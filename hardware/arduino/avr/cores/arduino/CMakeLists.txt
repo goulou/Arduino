@@ -1,5 +1,5 @@
 # Project name
-project(Arduino)
+project(Arduino_${DEVICE_NAME})
 
 # CMake version
 cmake_minimum_required(VERSION 2.6)
