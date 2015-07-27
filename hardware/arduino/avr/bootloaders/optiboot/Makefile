@@ -30,7 +30,7 @@ PROGRAM    = optiboot
 
 
 # enter the parameters for the avrdude isp tool
-ISPTOOL	   = stk500v2
+ISPTOOL	   = usbasp
 ISPPORT	   = usb
 ISPSPEED   = -b 115200
 
@@ -96,7 +96,7 @@ endif
 ISPFUSES    = $(GCCROOT)avrdude $(AVRDUDE_CONF) -c $(ISPTOOL) \
               -p $(MCU_TARGET) -P $(ISPPORT) $(ISPSPEED) \
               -e -u -U lock:w:0x3f:m -U efuse:w:0x$(EFUSE):m \
-              -U hfuse:w:0x$(HFUSE):m -U lfuse:w:0x$(LFUSE):m
+              -U hfuse:w:0x$(HFUSE):m -U lfuse:w:0x$(LFUSE):m -V
 ISPFLASH    = $(GCCROOT)avrdude $(AVRDUDE_CONF) -c $(ISPTOOL) \
               -p $(MCU_TARGET) -P $(ISPPORT) $(ISPSPEED) \
               -U flash:w:$(PROGRAM)_$(TARGET).hex -U lock:w:0x2f:m
@@ -107,8 +107,12 @@ STK500-1 = $(STK500) -e -d$(MCU_TARGET) -pf -vf -if$(PROGRAM)_$(TARGET).hex \
 STK500-2 = $(STK500) -d$(MCU_TARGET) -ms -q -lCF -LCF -cUSB -I200kHz -s -wt
 
 OBJ        = $(PROGRAM).o
+GCC_VER_GTE48 := $(shell echo "`avr-gcc -dumpversion | cut -d. -f1-2`>=4.8" | bc)
+ifeq ($(GCC_VER_GTE48),1)
+OPTIMIZE = -Os -fno-inline-small-functions -fno-split-wide-types -mrelax
+else
 OPTIMIZE = -Os -fno-inline-small-functions -fno-split-wide-types -mshort-calls
-
+endif
 DEFS       = 
 LIBS       =
 
@@ -216,24 +220,58 @@ diecimila_isp: LFUSE = FF
 diecimila_isp: EFUSE = 04
 diecimila_isp: isp
 
-atmega328: TARGET = atmega328
+atmega328: TARGET = atmega328p
 atmega328: MCU_TARGET = atmega328p
 atmega328: CFLAGS += '-DLED_START_FLASHES=3' '-DBAUD_RATE=115200'
-atmega328: AVR_FREQ = 16000000L
+atmega328: AVR_FREQ = 8000000L
 atmega328: LDSECTIONS  = -Wl,--section-start=.text=0x7e00 -Wl,--section-start=.version=0x7ffe
-atmega328: $(PROGRAM)_atmega328.hex
-atmega328: $(PROGRAM)_atmega328.lst
+atmega328: $(PROGRAM)_atmega328p.hex
+atmega328: $(PROGRAM)_atmega328p.lst
 
 atmega328_isp: atmega328
-atmega328_isp: TARGET = atmega328
+atmega328_isp: TARGET = atmega328p
 atmega328_isp: MCU_TARGET = atmega328p
 # 512 byte boot, SPIEN
-atmega328_isp: HFUSE = DE
+atmega328_isp: HFUSE = D9
 # Low power xtal (16MHz) 16KCK/14CK+65ms
-atmega328_isp: LFUSE = FF
+atmega328_isp: LFUSE = E2
 # 2.7V brownout
-atmega328_isp: EFUSE = 05
+atmega328_isp: EFUSE = FF
 atmega328_isp: isp
+
+atmega328_flash: atmega328
+atmega328_flash: TARGET = atmega328
+atmega328_flash: MCU_TARGET = atmega328p
+# 512 byte boot, SPIEN
+atmega328_flash: HFUSE = D9
+# Low power xtal (16MHz) 16KCK/14CK+65ms
+atmega328_flash: LFUSE = E2
+# 2.7V brownout
+atmega328_flash: EFUSE = FF
+atmega328_flash: $(TARGET)
+			$(ISPFLASH)
+
+
+# Standard atmega328, only at 38,400 baud for closer clock accuracy AND using 8Mhz internal RC oscillator
+#
+atmega328_384_8: TARGET = atmega328
+atmega328_384_8: MCU_TARGET = atmega328p
+atmega328_384_8: CFLAGS += '-DLED_START_FLASHES=0' '-DBAUD_RATE=38400'
+atmega328_384_8: AVR_FREQ = 8000000L
+atmega328_384_8: LDSECTIONS  = -Wl,--section-start=.text=0x7e00 -Wl,--section-start=.version=0x7ffe
+atmega328_384_8: $(PROGRAM)_atmega328_384_8.hex
+atmega328_384_8: $(PROGRAM)_atmega328_384_8.lst
+
+atmega328_384_8_isp: atmega328
+atmega328_384_8_isp: TARGET = atmega328
+atmega328_384_8_isp: MCU_TARGET = atmega328p
+# 512 byte boot, SPIEN
+atmega328_384_8_isp: HFUSE = DE
+# Int. RC Osc. 8MHz, slowly rising power-65ms
+atmega328_384_8_isp: LFUSE = E2
+# 2.7V brownout
+atmega328_384_8_isp: EFUSE = 05
+atmega328_384_8_isp: isp
 
 # Sanguino has a minimum boot size of 1024 bytes, so enable extra functions
 #

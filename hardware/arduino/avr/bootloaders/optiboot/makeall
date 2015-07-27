@@ -5,6 +5,7 @@ make clean
 make atmega8
 make atmega168
 make atmega328
+make atmega328p
 #
 # additional buildable platforms of
 #  somewhat questionable support level
