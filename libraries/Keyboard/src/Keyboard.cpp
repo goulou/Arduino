@@ -27,7 +27,7 @@
 //================================================================================
 //	Keyboard
 
-static const u8 _hidReportDescriptor[] PROGMEM = {
+static const uint8_t _hidReportDescriptor[] PROGMEM = {
 
   //  Keyboard
     0x05, 0x01,                    // USAGE_PAGE (Generic Desktop)  // 47
@@ -62,12 +62,8 @@ static const u8 _hidReportDescriptor[] PROGMEM = {
 
 Keyboard_::Keyboard_(void) 
 {
-	static HID_Descriptor cb = {
-		.length = sizeof(_hidReportDescriptor),
-		.descriptor = _hidReportDescriptor,
-	};
-	static HIDDescriptorListNode node(&cb);
-	HID.AppendDescriptor(&node);
+	static HIDDescriptorListNode node(_hidReportDescriptor, sizeof(_hidReportDescriptor));
+	HID().AppendDescriptor(&node);
 }
 
 void Keyboard_::begin(void)
@@ -80,7 +76,7 @@ void Keyboard_::end(void)
 
 void Keyboard_::sendReport(KeyReport* keys)
 {
-	HID.SendReport(2,keys,sizeof(KeyReport));
+	HID().SendReport(2,keys,sizeof(KeyReport));
 }
 
 extern
@@ -213,7 +209,7 @@ const uint8_t _asciimap[128] =
 	0x1b,          // x
 	0x1c,          // y
 	0x1d,          // z
-	0x2f|SHIFT,    // 
+	0x2f|SHIFT,    // {
 	0x31|SHIFT,    // |
 	0x30|SHIFT,    // }
 	0x35|SHIFT,    // ~

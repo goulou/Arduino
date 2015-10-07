@@ -1,5 +1,3 @@
-/* -*- mode: jde; c-basic-offset: 2; indent-tabs-mode: nil -*- */
-
 /*
   BasicUploader - generic command line uploader implementation
   Part of the Arduino project - http://www.arduino.cc/
@@ -28,6 +26,7 @@ package cc.arduino.packages.uploaders;
 
 import cc.arduino.packages.Uploader;
 import processing.app.*;
+import cc.arduino.LoadVIDPIDSpecificPreferences;
 import processing.app.debug.RunnerException;
 import processing.app.debug.TargetPlatform;
 import processing.app.helpers.OSUtils;
@@ -342,6 +341,8 @@ public class SerialUploader extends Uploader {
       prefs.put("erase.verbose", prefs.getOrExcept("erase.params.quiet"));
       prefs.put("bootloader.verbose", prefs.getOrExcept("bootloader.params.quiet"));
     }
+
+    new LoadVIDPIDSpecificPreferences().load(prefs);
 
     String pattern = prefs.getOrExcept("erase.pattern");
     String[] cmd = StringReplacer.formatAndSplit(pattern, prefs, true);

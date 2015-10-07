@@ -25,10 +25,14 @@ package processing.app;
 import processing.app.helpers.FileUtils;
 
 import java.io.File;
-import java.io.FileFilter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static processing.app.I18n.tr;
 
@@ -92,18 +96,17 @@ public class SketchCode {
   }
 
 
-  protected boolean deleteFile(File tempBuildFolder) {
+  protected boolean deleteFile(File tempBuildFolder) throws IOException {
     if (!file.delete()) {
       return false;
     }
 
-    File[] compiledFiles = tempBuildFolder.listFiles(new FileFilter() {
-      public boolean accept(File pathname) {
-        return pathname.getName().startsWith(getFileName());
-      }
-    });
-    for (File compiledFile : compiledFiles) {
-      if (!compiledFile.delete()) {
+    List<Path> tempBuildFolders = Stream.of(tempBuildFolder.toPath(), Paths.get(tempBuildFolder.getAbsolutePath(), "sketch"))
+      .filter(path -> Files.exists(path))
+      .collect(Collectors.toList());
+
+    for (Path folder : tempBuildFolders) {
+      if (!deleteCompiledFilesFrom(folder)) {
         return false;
       }
     }
@@ -111,6 +114,20 @@ public class SketchCode {
     return true;
   }
 
+  private boolean deleteCompiledFilesFrom(Path tempBuildFolder) throws IOException {
+    List<Path> compiledFiles = Files.list(tempBuildFolder)
+      .filter(pathname -> pathname.getFileName().toString().startsWith(getFileName()))
+      .collect(Collectors.toList());
+
+    for (Path compiledFile : compiledFiles) {
+      try {
+        Files.delete(compiledFile);
+      } catch (IOException e) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   protected boolean renameTo(File what) {
     boolean success = file.renameTo(what);

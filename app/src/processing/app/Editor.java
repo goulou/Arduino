@@ -26,6 +26,7 @@ import cc.arduino.packages.BoardPort;
 import cc.arduino.packages.MonitorFactory;
 import cc.arduino.packages.Uploader;
 import cc.arduino.packages.uploaders.SerialUploader;
+import cc.arduino.view.GoToLineNumber;
 import cc.arduino.view.StubMenuListener;
 import cc.arduino.view.findreplace.FindReplace;
 import com.jcraft.jsch.JSchException;
@@ -36,11 +37,11 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxUtilities;
 import org.fife.ui.rtextarea.Gutter;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import processing.app.debug.RunnerException;
-import processing.app.debug.RunnerListener;
 import processing.app.forms.PasswordAuthorizationDialog;
 import processing.app.helpers.OSUtils;
 import processing.app.helpers.PreferencesMapException;
 import processing.app.legacy.PApplet;
+import processing.app.syntax.PdeKeywords;
 import processing.app.syntax.ArduinoTokenMakerFactory;
 import processing.app.syntax.SketchTextArea;
 import processing.app.tools.DiscourseFormat;
@@ -750,6 +751,10 @@ public class Editor extends JFrame implements RunnerListener {
     item = newJMenuItemAlt(tr("Export compiled Binary"), 'S');
     item.addActionListener(new ActionListener() {
         public void actionPerformed(ActionEvent e) {
+          if (new ShouldSaveReadOnly().test(sketch) && !handleSave(true)) {
+            System.out.println(tr("Export canceled, changes must first be saved."));
+            return;
+          }
           handleRun(false, new ShouldSaveReadOnly(), Editor.this.presentAndSaveHandler, Editor.this.runAndSaveHandler);
         }
       });
@@ -1055,6 +1060,15 @@ public class Editor extends JFrame implements RunnerListener {
 
     configurePopupMenu(textArea);
     return textArea;
+  }
+
+  public void updateKeywords(PdeKeywords keywords) {
+    // update GUI for "Find In Reference"
+    textarea.setKeywords(keywords);
+    // update document for syntax highlighting
+    RSyntaxDocument document = (RSyntaxDocument) textarea.getDocument();
+    document.setTokenMakerFactory(new ArduinoTokenMakerFactory(keywords));
+    document.setSyntaxStyle(RSyntaxDocument.SYNTAX_STYLE_CPLUSPLUS);
   }
 
   private JMenuItem createToolMenuItem(String className) {
@@ -1442,6 +1456,14 @@ public class Editor extends JFrame implements RunnerListener {
         }
       });
     menu.add(selectAllItem);
+
+    JMenuItem gotoLine = newJMenuItem(tr("Go to line..."), 'L');
+    gotoLine.addActionListener(e -> {
+      GoToLineNumber goToLineNumber = new GoToLineNumber(Editor.this);
+      goToLineNumber.setLocationRelativeTo(Editor.this);
+      goToLineNumber.setVisible(true);
+    });
+    menu.add(gotoLine);
 
     menu.addSeparator();
 
@@ -3003,6 +3025,17 @@ public class Editor extends JFrame implements RunnerListener {
       }
     });
 
+  }
+
+  public void goToLine(int line) {
+    if (line <= 0) {
+      return;
+    }
+    try {
+      textarea.setCaretPosition(textarea.getLineStartOffset(line - 1));
+    } catch (BadLocationException e) {
+      //ignore
+    }
   }
 
 }
