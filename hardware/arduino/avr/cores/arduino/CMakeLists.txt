@@ -27,3 +27,8 @@ target_include_directories(
 	)
 
 
+target_include_directories(
+	${PROJECT_NAME} PUBLIC
+	/usr/lib/avr/include/avr/
+	)
+
