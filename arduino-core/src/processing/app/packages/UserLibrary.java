@@ -31,7 +31,6 @@ package processing.app.packages;
 import cc.arduino.Constants;
 import cc.arduino.contributions.libraries.ContributedLibrary;
 import cc.arduino.contributions.libraries.ContributedLibraryReference;
-import processing.app.helpers.FileUtils;
 import processing.app.helpers.PreferencesMap;
 
 import java.io.File;
@@ -57,6 +56,7 @@ public class UserLibrary extends ContributedLibrary {
   private List<String> types;
   private List<String> declaredTypes;
   private boolean onGoingDevelopment;
+  private List<String> includes;
 
   public static UserLibrary create(File libFolder) throws IOException {
     // Parse metadata
@@ -91,11 +91,6 @@ public class UserLibrary extends ContributedLibrary {
     if (srcFolder.exists() && srcFolder.isDirectory()) {
       // Layout with a single "src" folder and recursive compilation
       layout = LibraryLayout.RECURSIVE;
-
-      File utilFolder = new File(libFolder, "utility");
-      if (utilFolder.exists() && utilFolder.isDirectory()) {
-        throw new IOException("Library can't use both 'src' and 'utility' folders.");
-      }
     } else {
       // Layout with source code on library's root and "utility" folders
       layout = LibraryLayout.FLAT;
@@ -105,13 +100,6 @@ public class UserLibrary extends ContributedLibrary {
     File[] files = libFolder.listFiles();
     if (files == null) {
       throw new IOException("Unable to list files of library in " + libFolder);
-    }
-    for (File file : files) {
-      if (file.isDirectory() && FileUtils.isSCCSOrHiddenFile(file)) {
-        if (!FileUtils.isSCCSFolder(file) && FileUtils.isHiddenFile(file)) {
-          System.out.println("WARNING: Spurious " + file.getName() + " folder in '" + properties.get("name") + "' library");
-        }
-      }
     }
 
     // Extract metadata info
@@ -123,10 +111,10 @@ public class UserLibrary extends ContributedLibrary {
       archs.add(arch.trim());
 
     String category = properties.get("category");
-    if (category == null)
+    if (category == null) {
       category = "Uncategorized";
+    }
     if (!Constants.LIBRARY_CATEGORIES.contains(category)) {
-      System.out.println("WARNING: Category '" + category + "' in library " + properties.get("name") + " is not valid. Setting to 'Uncategorized'");
       category = "Uncategorized";
     }
 
@@ -142,6 +130,13 @@ public class UserLibrary extends ContributedLibrary {
     List<String> typesList = new LinkedList<>();
     for (String type : types.split(",")) {
       typesList.add(type.trim());
+    }
+
+    List<String> includes = null;
+    if (properties.containsKey("includes")) {
+      includes = new ArrayList<>();
+      for (String i : properties.get("includes").split(","))
+        includes.add(i.trim());
     }
 
     UserLibrary res = new UserLibrary();
@@ -160,6 +155,7 @@ public class UserLibrary extends ContributedLibrary {
     res.layout = layout;
     res.declaredTypes = typesList;
     res.onGoingDevelopment = Files.exists(Paths.get(libFolder.getAbsolutePath(), Constants.LIBRARY_DEVELOPMENT_FLAG_FILE));
+    res.includes = includes;
     return res;
   }
 
@@ -260,6 +256,10 @@ public class UserLibrary extends ContributedLibrary {
     return onGoingDevelopment;
   }
 
+  public List<String> getIncludes() {
+    return includes;
+  }
+
   protected enum LibraryLayout {
     FLAT, RECURSIVE
   }
@@ -291,6 +291,8 @@ public class UserLibrary extends ContributedLibrary {
     res += "         (paragraph=" + paragraph + ")\n";
     res += "         (url=" + website + ")\n";
     res += "         (architectures=" + architectures + ")\n";
+    if (includes != null)
+      res += "         (includes=" + includes + ")\n";
     return res;
   }
 

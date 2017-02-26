@@ -1,6 +1,7 @@
 
 
-/* Copyright (c) 2010, Peter Barrett  
+/* Copyright (c) 2010, Peter Barrett
+** Sleep/Wakeup support added by Michael Dreher
 **  
 ** Permission to use, copy, modify, and/or distribute this software for  
 ** any purpose with or without fee is hereby granted, provided that the  
@@ -18,6 +19,7 @@
 
 #include "USBAPI.h"
 #include "PluggableUSB.h"
+#include <stdlib.h>
 
 #if defined(USBCON)
 
@@ -34,6 +36,7 @@ extern const u8 STRING_PRODUCT[] PROGMEM;
 extern const u8 STRING_MANUFACTURER[] PROGMEM;
 extern const DeviceDescriptor USB_DeviceDescriptor PROGMEM;
 extern const DeviceDescriptor USB_DeviceDescriptorB PROGMEM;
+extern bool _updatedLUFAbootloader;
 
 const u16 STRING_LANGUAGE[2] = {
 	(3<<8) | (2+2),
@@ -69,10 +72,10 @@ const u8 STRING_MANUFACTURER[] PROGMEM = USB_MANUFACTURER;
 
 //	DEVICE DESCRIPTOR
 const DeviceDescriptor USB_DeviceDescriptor =
-	D_DEVICE(0x00,0x00,0x00,64,USB_VID,USB_PID,0x100,IMANUFACTURER,IPRODUCT,0,1);
+	D_DEVICE(0x00,0x00,0x00,64,USB_VID,USB_PID,0x100,IMANUFACTURER,IPRODUCT,ISERIAL,1);
 
 const DeviceDescriptor USB_DeviceDescriptorB =
-	D_DEVICE(0xEF,0x02,0x01,64,USB_VID,USB_PID,0x100,IMANUFACTURER,IPRODUCT,0,1);
+	D_DEVICE(0xEF,0x02,0x01,64,USB_VID,USB_PID,0x100,IMANUFACTURER,IPRODUCT,ISERIAL,1);
 
 //==================================================================
 //==================================================================
@@ -253,7 +256,9 @@ u8 USB_SendSpace(u8 ep)
 	LockEP lock(ep);
 	if (!ReadWriteAllowed())
 		return 0;
-	return USB_EP_SIZE - FifoByteCount();
+	// subtract 1 from the EP size to never send a full packet,
+	// this avoids dealing with ZLP's in USB_Send
+	return USB_EP_SIZE - 1 - FifoByteCount();
 }
 
 //	Blocking Send of data to an endpoint
@@ -261,6 +266,11 @@ int USB_Send(u8 ep, const void* d, int len)
 {
 	if (!_usbConfiguration)
 		return -1;
+
+	if (_usbSuspendState & (1<<SUSPI)) {
+		//send a remote wakeup
+		UDCON |= (1 << RMWKUP);
+	}
 
 	int r = len;
 	const u8* data = (const u8*)d;
@@ -362,7 +372,7 @@ bool ClassInterfaceRequest(USBSetup& setup)
 		return CDC_Setup(setup);
 
 #ifdef PLUGGABLE_USB_ENABLED
-	return PluggableUSB().setup(setup, i);
+	return PluggableUSB().setup(setup);
 #endif
 	return false;
 }
@@ -389,7 +399,7 @@ bool SendControl(u8 d)
 	}
 	_cmark++;
 	return true;
-};
+}
 
 //	Clipped by _cmark/_cend
 int USB_SendControl(u8 flags, const void* d, int len)
@@ -409,11 +419,12 @@ int USB_SendControl(u8 flags, const void* d, int len)
 // Send a USB descriptor string. The string is stored in PROGMEM as a
 // plain ASCII string but is sent out as UTF-16 with the correct 2-byte
 // prefix
-static bool USB_SendStringDescriptor(const u8*string_P, u8 string_len) {
+static bool USB_SendStringDescriptor(const u8*string_P, u8 string_len, uint8_t flags) {
         SendControl(2 + string_len * 2);
         SendControl(3);
+        bool pgm = flags & TRANSFER_PGM;
         for(u8 i = 0; i < string_len; i++) {
-                bool r = SendControl(pgm_read_byte(&string_P[i]));
+                bool r = SendControl(pgm ? pgm_read_byte(&string_P[i]) : string_P[i]);
                 r &= SendControl(0); // high byte
                 if(!r) {
                         return false;
@@ -423,13 +434,24 @@ static bool USB_SendStringDescriptor(const u8*string_P, u8 string_len) {
 }
 
 //	Does not timeout or cross fifo boundaries
-//	Will only work for transfers <= 64 bytes
-//	TODO
 int USB_RecvControl(void* d, int len)
 {
-	WaitOUT();
-	Recv((u8*)d,len);
-	ClearOUT();
+	auto length = len;
+	while(length)
+	{
+		// Dont receive more than the USB Control EP has to offer
+		// Use fixed 64 because control EP always have 64 bytes even on 16u2.
+		auto recvLength = length;
+		if(recvLength > 64){
+			recvLength = 64;
+		}
+
+		// Write data to fit to the end (not the beginning) of the array
+		WaitOUT();
+		Recv((u8*)d + len - length, recvLength);
+		ClearOUT();
+		length -= recvLength;
+	}
 	return len;
 }
 
@@ -476,7 +498,7 @@ bool SendDescriptor(USBSetup& setup)
 
 	InitControl(setup.wLength);
 #ifdef PLUGGABLE_USB_ENABLED
-	ret = PluggableUSB().getDescriptor(t);
+	ret = PluggableUSB().getDescriptor(setup);
 	if (ret != 0) {
 		return (ret > 0 ? true : false);
 	}
@@ -495,10 +517,17 @@ bool SendDescriptor(USBSetup& setup)
 			desc_addr = (const u8*)&STRING_LANGUAGE;
 		}
 		else if (setup.wValueL == IPRODUCT) {
-			return USB_SendStringDescriptor(STRING_PRODUCT, strlen(USB_PRODUCT));
+			return USB_SendStringDescriptor(STRING_PRODUCT, strlen(USB_PRODUCT), TRANSFER_PGM);
 		}
 		else if (setup.wValueL == IMANUFACTURER) {
-			return USB_SendStringDescriptor(STRING_MANUFACTURER, strlen(USB_MANUFACTURER));
+			return USB_SendStringDescriptor(STRING_MANUFACTURER, strlen(USB_MANUFACTURER), TRANSFER_PGM);
+		}
+		else if (setup.wValueL == ISERIAL) {
+#ifdef PLUGGABLE_USB_ENABLED
+			char name[ISERIAL_MAX_LEN];
+			PluggableUSB().getShortName(name);
+			return USB_SendStringDescriptor((uint8_t*)name, strlen(name), 0);
+#endif
 		}
 		else
 			return false;
@@ -710,7 +739,7 @@ static inline void USB_ClockEnable()
 ISR(USB_GEN_vect)
 {
 	u8 udint = UDINT;
-	UDINT = UDINT &= ~((1<<EORSTI) | (1<<SOFI)); // clear the IRQ flags for the IRQs which are handled here, except WAKEUPI and SUSPI (see below)
+	UDINT &= ~((1<<EORSTI) | (1<<SOFI)); // clear the IRQ flags for the IRQs which are handled here, except WAKEUPI and SUSPI (see below)
 
 	//	End of Reset
 	if (udint & (1<<EORSTI))
@@ -786,6 +815,12 @@ void USBDevice_::attach()
 	UDIEN = (1<<EORSTE) | (1<<SOFE) | (1<<SUSPE);	// Enable interrupts for EOR (End of Reset), SOF (start of frame) and SUSPEND
 	
 	TX_RX_LED_INIT;
+
+#if MAGIC_KEY_POS != (RAMEND-1)
+	if (pgm_read_word(FLASHEND - 1) == NEW_LUFA_SIGNATURE) {
+		_updatedLUFAbootloader = true;
+	}
+#endif
 }
 
 void USBDevice_::detach()

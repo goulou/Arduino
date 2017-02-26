@@ -29,18 +29,21 @@
 
 package cc.arduino.contributions;
 
-import cc.arduino.contributions.libraries.LibrariesIndexer;
 import cc.arduino.contributions.libraries.LibraryInstaller;
 import cc.arduino.contributions.libraries.filters.UpdatableLibraryPredicate;
 import cc.arduino.contributions.packages.ContributionInstaller;
-import cc.arduino.contributions.packages.ContributionsIndexer;
 import cc.arduino.contributions.packages.filters.UpdatablePlatformPredicate;
 import cc.arduino.view.NotificationPopup;
 import processing.app.Base;
+import processing.app.BaseNoGui;
+import processing.app.Editor;
 import processing.app.I18n;
 
 import javax.swing.*;
 import javax.swing.event.HyperlinkListener;
+
+import java.awt.event.WindowEvent;
+import java.awt.event.WindowFocusListener;
 import java.util.TimerTask;
 
 import static processing.app.I18n.tr;
@@ -49,21 +52,17 @@ public class ContributionsSelfCheck extends TimerTask {
 
   private final Base base;
   private final HyperlinkListener hyperlinkListener;
-  private final ContributionsIndexer contributionsIndexer;
   private final ContributionInstaller contributionInstaller;
-  private final LibrariesIndexer librariesIndexer;
   private final LibraryInstaller libraryInstaller;
   private final ProgressListener progressListener;
 
   private volatile boolean cancelled;
   private volatile NotificationPopup notificationPopup;
 
-  public ContributionsSelfCheck(Base base, HyperlinkListener hyperlinkListener, ContributionsIndexer contributionsIndexer, ContributionInstaller contributionInstaller, LibrariesIndexer librariesIndexer, LibraryInstaller libraryInstaller) {
+  public ContributionsSelfCheck(Base base, HyperlinkListener hyperlinkListener, ContributionInstaller contributionInstaller, LibraryInstaller libraryInstaller) {
     this.base = base;
     this.hyperlinkListener = hyperlinkListener;
-    this.contributionsIndexer = contributionsIndexer;
     this.contributionInstaller = contributionInstaller;
-    this.librariesIndexer = librariesIndexer;
     this.libraryInstaller = libraryInstaller;
     this.progressListener = new NoopProgressListener();
     this.cancelled = false;
@@ -74,12 +73,12 @@ public class ContributionsSelfCheck extends TimerTask {
     updateContributionIndex();
     updateLibrariesIndex();
 
-    long updatablePlatforms = contributionsIndexer.getPackages().stream()
+    long updatablePlatforms = BaseNoGui.indexer.getPackages().stream()
       .flatMap(pack -> pack.getPlatforms().stream())
-      .filter(new UpdatablePlatformPredicate(contributionsIndexer)).count();
+      .filter(new UpdatablePlatformPredicate()).count();
 
-    long updatableLibraries = librariesIndexer.getInstalledLibraries().stream()
-      .filter(new UpdatableLibraryPredicate(librariesIndexer))
+    long updatableLibraries = BaseNoGui.librariesIndexer.getInstalledLibraries().stream()
+      .filter(new UpdatableLibraryPredicate())
       .count();
 
     if (updatableLibraries <= 0 && updatablePlatforms <= 0) {
@@ -88,11 +87,11 @@ public class ContributionsSelfCheck extends TimerTask {
 
     String text;
     if (updatableLibraries > 0 && updatablePlatforms <= 0) {
-      text = I18n.format(tr("<br/>Update available for some of your {0}libraries{1}"), "<a href=\"http://librarymanager\">", "</a>");
+      text = I18n.format(tr("Updates available for some of your {0}libraries{1}"), "<a href=\"http://librarymanager/DropdownUpdatableLibrariesItem\">", "</a>");
     } else if (updatableLibraries <= 0 && updatablePlatforms > 0) {
-      text = I18n.format(tr("<br/>Update available for some of your {0}boards{1}"), "<a href=\"http://boardsmanager\">", "</a>");
+      text = I18n.format(tr("Updates available for some of your {0}boards{1}"), "<a href=\"http://boardsmanager/DropdownUpdatableCoresItem\">", "</a>");
     } else {
-      text = I18n.format(tr("<br/>Update available for some of your {0}boards{1} and {2}libraries{3}"), "<a href=\"http://boardsmanager\">", "</a>", "<a href=\"http://librarymanager\">", "</a>");
+      text = I18n.format(tr("Updates available for some of your {0}boards{1} and {2}libraries{3}"), "<a href=\"http://boardsmanager/DropdownUpdatableCoresItem\">", "</a>", "<a href=\"http://librarymanager/DropdownUpdatableLibrariesItem\">", "</a>");
     }
 
     if (cancelled) {
@@ -100,8 +99,30 @@ public class ContributionsSelfCheck extends TimerTask {
     }
 
     SwingUtilities.invokeLater(() -> {
-      notificationPopup = new NotificationPopup(base.getActiveEditor(), hyperlinkListener, text);
-      notificationPopup.setVisible(true);
+      Editor ed = base.getActiveEditor();
+      notificationPopup = new NotificationPopup(ed, hyperlinkListener, text);
+      if (ed.isFocused()) {
+        notificationPopup.begin();
+        return;
+      }
+
+      // If the IDE is not focused wait until it is focused again to
+      // display the notification, this avoids the annoying side effect
+      // to "steal" the focus from another application.
+      WindowFocusListener wfl = new WindowFocusListener() {
+        @Override
+        public void windowLostFocus(WindowEvent evt) {
+        }
+
+        @Override
+        public void windowGainedFocus(WindowEvent evt) {
+          notificationPopup.begin();
+          for (Editor e : base.getEditors())
+            e.removeWindowFocusListener(this);
+        }
+      };
+      for (Editor e : base.getEditors())
+        e.addWindowFocusListener(wfl);
     });
   }
 

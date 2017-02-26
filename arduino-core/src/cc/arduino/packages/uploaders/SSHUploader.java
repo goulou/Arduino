@@ -39,8 +39,12 @@ import com.jcraft.jsch.Session;
 import processing.app.BaseNoGui;
 import processing.app.I18n;
 import processing.app.PreferencesData;
-import processing.app.debug.*;
-import processing.app.helpers.*;
+import processing.app.debug.RunnerException;
+import processing.app.debug.TargetPlatform;
+import processing.app.helpers.PreferencesMap;
+import processing.app.helpers.PreferencesMapException;
+import processing.app.helpers.StringReplacer;
+import processing.app.helpers.StringUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -59,6 +63,7 @@ public class SSHUploader extends Uploader {
     this.port = port;
   }
 
+  @Override
   public boolean requiresAuthorization() {
     return true;
   }
@@ -106,6 +111,8 @@ public class SSHUploader extends Uploader {
       SSHClientSetupChainRing sshClientSetupChain = new SSHConfigFileSetup(new SSHPwdSetup());
       session = sshClientSetupChain.setup(port, jSch);
 
+      session.setConfig("PreferredAuthentications", "publickey,keyboard-interactive,password");
+
       session.setUserInfo(new NoInteractionUserInfo(PreferencesData.get("runtime.pwd." + port.getAddress())));
       session.connect(30000);
 
@@ -129,11 +136,11 @@ public class SSHUploader extends Uploader {
       return runUploadTool(ssh, prefs);
     } catch (JSchException e) {
       String message = e.getMessage();
-      if ("Auth cancel".equals(message) || "Auth fail".equals(message)) {
+      if (message.contains("Auth cancel") || message.contains("Auth fail") || message.contains("authentication fail")) {
         return false;
       }
       if (e.getMessage().contains("Connection refused")) {
-        throw new RunnerException(I18n.format("Unable to connect to {0}", port.getAddress()));
+        throw new RunnerException(I18n.format(tr("Unable to connect to {0}"), port.getAddress()));
       }
       throw new RunnerException(e);
     } catch (Exception e) {
@@ -199,7 +206,7 @@ public class SSHUploader extends Uploader {
       return false;
     }
     if (!www.canExecute()) {
-      warningsAccumulator.add(tr("Problem accessing files in folder ") + www);
+      warningsAccumulator.add(I18n.format(tr("Problem accessing files in folder \"{0}\""), www));
       return false;
     }
     if (!ssh.execSyncCommand("special-storage-available")) {

@@ -42,6 +42,20 @@ public abstract class ContributedTool {
 
   public abstract List<HostDependentDownloadableContribution> getSystems();
 
+  private ContributedPackage contributedPackage;
+
+  public ContributedPackage getPackage() {
+    return contributedPackage;
+  }
+
+  public void setPackage(ContributedPackage pack) {
+    contributedPackage = pack;
+  }
+
+  public String getPackager() {
+    return contributedPackage.getName();
+  }
+
   public DownloadableContribution getDownloadableContribution(Platform platform) {
     for (HostDependentDownloadableContribution c : getSystems()) {
       if (c.isCompatible(platform))
@@ -68,4 +82,16 @@ public abstract class ContributedTool {
     return res;
   }
 
+  @Override
+  public boolean equals(Object obj) {
+    if (obj == null) {
+      return false;
+    }
+    if (!(obj instanceof ContributedTool)) {
+      return false;
+    }
+
+    ContributedTool obj1 = (ContributedTool) obj;
+    return getName().equals(obj1.getName()) && getVersion().equals(obj1.getVersion());
+  }
 }

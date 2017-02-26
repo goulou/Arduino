@@ -22,18 +22,10 @@
 
 package processing.app.linux;
 
-import org.apache.commons.exec.CommandLine;
-import org.apache.commons.exec.DefaultExecutor;
-import org.apache.commons.exec.Executor;
-import org.apache.commons.exec.PumpStreamHandler;
 import processing.app.PreferencesData;
-import processing.app.debug.TargetPackage;
 import processing.app.legacy.PConstants;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.IOException;
-import java.util.Map;
 
 
 /**
@@ -44,17 +36,20 @@ public class Platform extends processing.app.Platform {
 
   // TODO Need to be smarter here since KDE people ain't gonna like that GTK.
   //      It may even throw a weird exception at 'em for their trouble.
+  @Override
   public void setLookAndFeel() throws Exception {
     GTKLookAndFeelFixer.installGtkPopupBugWorkaround();
   }
 
 
+  @Override
   public File getDefaultSketchbookFolder() throws Exception {
     File home = new File(System.getProperty("user.home"));
     return new File(home, "Arduino");
   }
 
 
+  @Override
   public void openURL(String url) throws Exception {
     if (openFolderAvailable()) {
       String launcher = PreferencesData.get("launcher");
@@ -65,6 +60,7 @@ public class Platform extends processing.app.Platform {
   }
 
 
+  @Override
   public boolean openFolderAvailable() {
     if (PreferencesData.get("launcher") != null) {
       return true;
@@ -99,6 +95,7 @@ public class Platform extends processing.app.Platform {
   }
 
 
+  @Override
   public void openFolder(File file) throws Exception {
     if (openFolderAvailable()) {
       String launcher = PreferencesData.get("launcher");
@@ -119,31 +116,5 @@ public class Platform extends processing.app.Platform {
   @Override
   public String getName() {
     return PConstants.platformNames[PConstants.LINUX];
-  }
-
-  @Override
-  public Map<String, Object> resolveDeviceAttachedTo(String serial, Map<String, TargetPackage> packages, String devicesListOutput) {
-    assert packages != null;
-    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    Executor executor = new DefaultExecutor();
-    executor.setStreamHandler(new PumpStreamHandler(baos, null));
-
-    try {
-      CommandLine toDevicePath = CommandLine.parse("udevadm info -q path -n " + serial);
-      executor.execute(toDevicePath);
-      String devicePath = new String(baos.toByteArray());
-      baos.reset();
-      CommandLine commandLine = CommandLine.parse("udevadm info --query=property -p " + devicePath);
-      executor.execute(commandLine);
-      String vidPid = new UDevAdmParser().extractVIDAndPID(new String(baos.toByteArray()));
-
-      if (vidPid == null) {
-        return super.resolveDeviceAttachedTo(serial, packages, devicesListOutput);
-      }
-
-      return super.resolveDeviceByVendorIdProductId(packages, vidPid);
-    } catch (IOException e) {
-      return super.resolveDeviceAttachedTo(serial, packages, devicesListOutput);
-    }
   }
 }

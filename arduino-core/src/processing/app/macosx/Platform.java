@@ -29,7 +29,6 @@ import org.apache.commons.exec.DefaultExecutor;
 import org.apache.commons.exec.Executor;
 import org.apache.commons.exec.PumpStreamHandler;
 import org.apache.commons.lang3.StringUtils;
-import processing.app.debug.TargetPackage;
 import processing.app.legacy.PApplet;
 import processing.app.legacy.PConstants;
 
@@ -41,7 +40,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 
 
 /**
@@ -51,6 +49,7 @@ public class Platform extends processing.app.Platform {
 
   private String osArch;
 
+  @Override
   public void setLookAndFeel() throws Exception {
   }
 
@@ -60,7 +59,8 @@ public class Platform extends processing.app.Platform {
     Toolkit.getDefaultToolkit();
   }
 
-  public void init() throws IOException {
+  @Override
+  public void init() throws Exception {
     super.init();
 
     System.setProperty("apple.laf.useScreenMenuBar", "true");
@@ -78,11 +78,13 @@ public class Platform extends processing.app.Platform {
   }
 
 
+  @Override
   public File getSettingsFolder() throws Exception {
     return new File(getLibraryFolder(), "Arduino15");
   }
 
 
+  @Override
   public File getDefaultSketchbookFolder() throws Exception {
     return new File(getDocumentsFolder(), "Arduino");
     /*
@@ -100,6 +102,7 @@ public class Platform extends processing.app.Platform {
   }
 
 
+  @Override
   public void openURL(String url) throws Exception {
     Desktop desktop = Desktop.getDesktop();
     if (url.startsWith("http") || url.startsWith("file:")) {
@@ -110,11 +113,13 @@ public class Platform extends processing.app.Platform {
   }
 
 
+  @Override
   public boolean openFolderAvailable() {
     return true;
   }
 
 
+  @Override
   public void openFolder(File file) throws Exception {
     //openURL(file.getAbsolutePath());  // handles char replacement, etc
     PApplet.open(file.getAbsolutePath());
@@ -165,47 +170,12 @@ public class Platform extends processing.app.Platform {
   }
 
   @Override
-  public Map<String, Object> resolveDeviceAttachedTo(String serial, Map<String, TargetPackage> packages, String devicesListOutput) {
-    assert packages != null;
-    if (devicesListOutput == null) {
-      return super.resolveDeviceAttachedTo(serial, packages, null);
-    }
-
-    try {
-      String vidPid = new SystemProfilerParser().extractVIDAndPID(devicesListOutput, serial);
-
-      if (vidPid == null) {
-        return super.resolveDeviceAttachedTo(serial, packages, devicesListOutput);
-      }
-
-      return super.resolveDeviceByVendorIdProductId(packages, vidPid);
-    } catch (IOException e) {
-      return super.resolveDeviceAttachedTo(serial, packages, devicesListOutput);
-    }
-  }
-
-  @Override
-  public String preListAllCandidateDevices() {
-    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    Executor executor = new DefaultExecutor();
-    executor.setStreamHandler(new PumpStreamHandler(baos, null));
-
-    try {
-      CommandLine toDevicePath = CommandLine.parse("/usr/sbin/system_profiler SPUSBDataType");
-      executor.execute(toDevicePath);
-      return new String(baos.toByteArray());
-    } catch (Throwable e) {
-      return super.preListAllCandidateDevices();
-    }
-  }
-
-  @Override
   public java.util.List<BoardPort> filterPorts(java.util.List<BoardPort> ports, boolean showAll) {
     if (showAll) {
       return super.filterPorts(ports, true);
     }
 
-    List<BoardPort> filteredPorts = new LinkedList<BoardPort>();
+    List<BoardPort> filteredPorts = new LinkedList<>();
     for (BoardPort port : ports) {
       if (!port.getAddress().startsWith("/dev/tty.")) {
         filteredPorts.add(port);

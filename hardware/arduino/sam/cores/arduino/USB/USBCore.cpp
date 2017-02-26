@@ -66,27 +66,16 @@ const uint16_t STRING_LANGUAGE[2] = {
 };
 
 #ifndef USB_PRODUCT
-// Use a hardcoded product name if none is provided
-#if USB_PID == USB_PID_DUE
 #define USB_PRODUCT "Arduino Due"
-#else
-#define USB_PRODUCT "USB IO Board"
-#endif
 #endif
 
 const uint8_t STRING_PRODUCT[] = USB_PRODUCT;
 
-#if USB_VID == 0x2341
-#  if defined(USB_MANUFACTURER)
-#    undef USB_MANUFACTURER
-#  endif
-#  define USB_MANUFACTURER "Arduino LLC"
-#elif !defined(USB_MANUFACTURER)
-// Fall through to unknown if no manufacturer name was provided in a macro
-#  define USB_MANUFACTURER "Unknown"
+#ifndef USB_MANUFACTURER
+#define USB_MANUFACTURER "Arduino LLC"
 #endif
 
-const uint8_t STRING_MANUFACTURER[12] = USB_MANUFACTURER;
+const uint8_t STRING_MANUFACTURER[] = USB_MANUFACTURER;
 
 #ifdef CDC_ENABLED
 #define DEVICE_CLASS 0x02
@@ -96,12 +85,12 @@ const uint8_t STRING_MANUFACTURER[12] = USB_MANUFACTURER;
 
 //	DEVICE DESCRIPTOR
 const DeviceDescriptor USB_DeviceDescriptor =
-	D_DEVICE(0x00,0x00,0x00,64,USB_VID,USB_PID,0x100,IMANUFACTURER,IPRODUCT,0,1);
+	D_DEVICE(0x00,0x00,0x00,64,USB_VID,USB_PID,0x100,IMANUFACTURER,IPRODUCT,ISERIAL,1);
 
 const DeviceDescriptor USB_DeviceDescriptorA =
-	D_DEVICE(0xEF,0x02,0x01,64,USB_VID,USB_PID,0x100,IMANUFACTURER,IPRODUCT,0,1);
+	D_DEVICE(0xEF,0x02,0x01,64,USB_VID,USB_PID,0x100,IMANUFACTURER,IPRODUCT,ISERIAL,1);
 
-const DeviceDescriptor USB_DeviceQualifier =
+const QualifierDescriptor USB_DeviceQualifier =
 	D_QUALIFIER(0x00,0x00,0x00,64,1);
 
 //! 7.1.20 Test Mode Support
@@ -130,7 +119,7 @@ class LockEP
 {
 	irqflags_t flags;
 public:
-	LockEP(uint32_t ep) : flags(cpu_irq_save())
+	LockEP(uint32_t ep __attribute__ ((unused))) : flags(cpu_irq_save())
 	{
 	}
 	~LockEP()
@@ -219,8 +208,8 @@ uint32_t USBD_Send(uint32_t ep, const void* d, uint32_t len)
 	return r;
 }
 
-int _cmark;
-int _cend;
+uint16_t _cmark;
+uint16_t _cend;
 
 void USBD_InitControl(int end)
 {
@@ -229,7 +218,7 @@ void USBD_InitControl(int end)
 }
 
 //	Clipped by _cmark/_cend
-int USBD_SendControl(uint8_t flags, const void* d, uint32_t len)
+int USBD_SendControl(uint8_t flags __attribute__ ((unused)), const void* d, uint32_t len)
 {
 	const uint8_t* data = (const uint8_t*)d;
 	uint32_t length = len;
@@ -258,15 +247,21 @@ int USBD_SendControl(uint8_t flags, const void* d, uint32_t len)
 // plain ASCII string but is sent out as UTF-16 with the
 // correct 2-byte prefix
 static bool USB_SendStringDescriptor(const uint8_t *string, int wLength) {
-	uint16_t buff[64];
-	int l = 1;
-	wLength-=2;
-	while (*string && wLength>0) {
-		buff[l++] = (uint8_t)(*string++);
-		wLength-=2;
+	if (wLength < 2)
+		return false;
+
+	uint8_t buffer[wLength];
+	buffer[0] = strlen((const char*)string) * 2 + 2;
+	buffer[1] = 0x03;
+
+	uint8_t i;
+	for (i = 2; i < wLength && *string; i++) {
+		buffer[i++] = *string++;
+		if (i == wLength) break;
+		buffer[i] = 0;
 	}
-	buff[0] = (3<<8) | (l*2);
-	return USBD_SendControl(0, (uint8_t*)buff, l*2);
+
+	return USBD_SendControl(0, (uint8_t*)buffer, i);
 }
 
 //	Does not timeout or cross fifo boundaries
@@ -296,13 +291,13 @@ bool USBD_ClassInterfaceRequest(USBSetup& setup)
 #endif
 
 #ifdef PLUGGABLE_USB_ENABLED
-	return PUSB_Setup(setup, i);
+	return PluggableUSB().setup(setup);
 #endif
 
 	return false;
 }
 
-int USBD_SendInterfaces(void)
+uint8_t USBD_SendInterfaces(void)
 {
 	uint8_t interfaces = 0;
 
@@ -311,14 +306,14 @@ int USBD_SendInterfaces(void)
 #endif
 
 #ifdef PLUGGABLE_USB_ENABLED
-	PUSB_GetInterface(&interfaces);
+	PluggableUSB().getInterface(&interfaces);
 #endif
 
 	TRACE_CORE(printf("=> USBD_SendInterfaces, interfaces=%d\r\n", interfaces);)
 	return interfaces;
 }
 
-int USBD_SendOtherInterfaces(void)
+uint8_t USBD_SendOtherInterfaces(void)
 {
 	uint8_t interfaces = 0;
 
@@ -327,7 +322,7 @@ int USBD_SendOtherInterfaces(void)
 #endif
 
 #ifdef PLUGGABLE_USB_ENABLED
-	PUSB_GetInterface(&interfaces);
+	PluggableUSB().getInterface(&interfaces);
 #endif
 
 	TRACE_CORE(printf("=> USBD_SendInterfaces, interfaces=%d\r\n", interfaces);)
@@ -342,7 +337,7 @@ static bool USBD_SendConfiguration(int maxlen)
 	//	Count and measure interfaces
 	USBD_InitControl(0);
 	//TRACE_CORE(printf("=> USBD_SendConfiguration _cmark1=%d\r\n", _cmark);)
-	int interfaces = USBD_SendInterfaces();
+	uint8_t interfaces = USBD_SendInterfaces();
 	//TRACE_CORE(printf("=> USBD_SendConfiguration _cmark2=%d\r\n", _cmark);)
 	//TRACE_CORE(printf("=> USBD_SendConfiguration sizeof=%d\r\n", sizeof(ConfigDescriptor));)
 
@@ -365,7 +360,7 @@ static bool USBD_SendOtherConfiguration(int maxlen)
 	//	Count and measure interfaces
 	USBD_InitControl(0);
 	//TRACE_CORE(printf("=> USBD_SendConfiguration _cmark1=%d\r\n", _cmark);)
-	int interfaces = USBD_SendOtherInterfaces();
+	uint8_t interfaces = USBD_SendOtherInterfaces();
 	//TRACE_CORE(printf("=> USBD_SendConfiguration _cmark2=%d\r\n", _cmark);)
 	//TRACE_CORE(printf("=> USBD_SendConfiguration sizeof=%d\r\n", sizeof(ConfigDescriptor));)
 
@@ -399,7 +394,7 @@ static bool USBD_SendDescriptor(USBSetup& setup)
 	USBD_InitControl(setup.wLength);
 
 #ifdef PLUGGABLE_USB_ENABLED
-	ret = PUSB_GetDescriptor(t);
+	ret = PluggableUSB().getDescriptor(setup);
 	if (ret != 0) {
 		return (ret > 0 ? true : false);
 	}
@@ -428,6 +423,13 @@ static bool USBD_SendDescriptor(USBSetup& setup)
 		}
 		else if (setup.wValueL == IMANUFACTURER) {
 			return USB_SendStringDescriptor(STRING_MANUFACTURER, setup.wLength);
+		}
+		else if (setup.wValueL == ISERIAL) {
+#ifdef PLUGGABLE_USB_ENABLED
+			char name[ISERIAL_MAX_LEN];
+			PluggableUSB().getShortName(name);
+			return USB_SendStringDescriptor((uint8_t*)name, setup.wLength);
+#endif
 		}
 		else {
 			return false;

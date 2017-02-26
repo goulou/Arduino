@@ -133,6 +133,10 @@ OPTIONS
 	This option is only valid together with *--verify* or
 	*--upload*.
 
+*--useprogrammer*::
+	Upload using a programmer. Set if you're using an external programmer, or
+	using the Arduino as ISP.
+
 *--verbose-upload*::
 	Enable verbose mode during upload. If this option is not given,
 	verbose mode during upload is *disabled* regardless of the current
@@ -289,7 +293,7 @@ afterwards:
      #!/bin/bash
      Xvfb :1 -nolisten tcp -screen :1 1280x800x24 &
      xvfb="$!"
-     DISPLAY=:1 arduino $@
+     DISPLAY=:1 arduino "$@"
      kill -9 $xvfb
 
 Save the script as *arduino-headless* and run it with the options described above.

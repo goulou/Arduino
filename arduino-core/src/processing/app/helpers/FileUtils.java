@@ -58,12 +58,12 @@ public class FileUtils {
   public static void copy(File sourceFolder, File destFolder) throws IOException {
     for (File file : sourceFolder.listFiles()) {
       File destFile = new File(destFolder, file.getName());
-      if (file.isDirectory()) {
-        if (!destFile.mkdir()) {
+      if (file.isDirectory() && !SOURCE_CONTROL_FOLDERS.contains(file.getName())) {
+        if (!destFile.exists() && !destFile.mkdir()) {
           throw new IOException("Unable to create folder: " + destFile);
         }
         copy(file, destFile);
-      } else {
+      } else if (!file.isDirectory()) {
         copyFile(file, destFile);
       }
     }
@@ -210,7 +210,7 @@ public class FileUtils {
   }
 
   public static List<String> readFileToListOfStrings(File file) throws IOException {
-    List<String> strings = new LinkedList<String>();
+    List<String> strings = new LinkedList<>();
     BufferedReader reader = null;
     try {
       reader = new BufferedReader(new FileReader(file));
@@ -241,15 +241,86 @@ public class FileUtils {
   }
 
   public static boolean hasExtension(File file, List<String> extensions) {
-    String pieces[] = file.getName().split("\\.");
-    if (pieces.length < 2) {
-      return false;
+    String extension = splitFilename(file).extension;
+    return extensions.contains(extension.toLowerCase());
+  }
+
+  /**
+   * Returns the given filename with the extension replaced by the one
+   * given. If the filename does not have an extension yet, one is
+   * added.
+   */
+  public static String replaceExtension(String filename, String extension) {
+    SplitFile split = splitFilename(filename);
+    split.extension = extension;
+    return split.join();
+  }
+
+  /**
+   * Returns the given filename with the extension replaced by the one
+   * given. If the filename does not have an extension yet, one is
+   * added.
+   */
+  public static File replaceExtension(File file, String extension) {
+    return new File(file.getParentFile(), replaceExtension(file.getName(), extension));
+  }
+
+  /**
+   * Adds an extension to the given filename. If it already contains
+   * one, an additional extension is added. If the extension is the
+   * empty string, the file is returned unmodified.
+   */
+  public static String addExtension(String filename, String extension) {
+    return extension.equals("") ? filename : (filename + "." + extension);
+  }
+
+  /**
+   * Adds an extension to the given filename. If it already contains
+   * one, an additional extension is added. If the extension is the
+   * empty string, the file is returned unmodified.
+   */
+  public static File addExtension(File file, String extension) {
+    return new File(file.getParentFile(), addExtension(file.getName(), extension));
+  }
+
+  /**
+   * The result of a splitFilename call.
+   */
+  public static class SplitFile {
+    public SplitFile(String basename, String extension) {
+      this.basename = basename;
+      this.extension = extension;
     }
 
-    String extension = pieces[pieces.length - 1];
+    public String basename;
+    public String extension;
 
-    return extensions.contains(extension.toLowerCase());
+    public String join() {
+      return addExtension(basename, extension);
+    }
+  }
 
+  /**
+   * Splits the given filename into a basename (everything up to the
+   * last dot) and an extension (everything from the last dot). The dot
+   * is not included in either part.
+   *
+   * If no dot is present, the entire filename is returned as the
+   * basename, leaving the extension empty (empty string, not null).
+   */
+  public static SplitFile splitFilename(String filename) {
+    int index = filename.lastIndexOf(".");
+
+    if (index >= 0)
+      return new SplitFile(filename.substring(0, index), filename.substring(index + 1));
+    return new SplitFile(filename, "");
+  }
+
+  /**
+   * Helper function returning splitFilename(file.getName()).
+   */
+  public static SplitFile splitFilename(File file) {
+    return splitFilename(file.getName());
   }
 
   /**
@@ -272,7 +343,7 @@ public class FileUtils {
 
   public static List<File> listFiles(File folder, boolean recursive,
                                      List<String> extensions) {
-    List<File> result = new ArrayList<File>();
+    List<File> result = new ArrayList<>();
 
     for (File file : folder.listFiles()) {
       if (isSCCSOrHiddenFile(file))

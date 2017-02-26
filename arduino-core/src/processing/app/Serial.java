@@ -112,7 +112,11 @@ public class Serial implements SerialPortEventListener {
     try {
       port = new SerialPort(iname);
       port.openPort();
-      port.setParams(irate, idatabits, stopbits, parity, true, true);
+      boolean res = port.setParams(irate, idatabits, stopbits, parity, true, true);
+      if (!res) {
+        System.err.println(format(tr("Error while setting serial port parameters: {0} {1} {2} {3}"),
+                                  irate, iparity, idatabits, istopbits));
+      }
       port.addEventListener(this);
     } catch (SerialPortException e) {
       if (e.getPortName().startsWith("/dev") && SerialPortException.TYPE_PERMISSION_DENIED.equals(e.getExceptionType())) {
@@ -144,6 +148,7 @@ public class Serial implements SerialPortEventListener {
     }
   }
 
+  @Override
   public synchronized void serialEvent(SerialPortEvent serialEvent) {
     if (serialEvent.isRXCHAR()) {
       try {
@@ -180,7 +185,7 @@ public class Serial implements SerialPortEventListener {
   }
 
 
-  private void write(byte bytes[]) {
+  public void write(byte bytes[]) {
     try {
       port.writeBytes(bytes);
     } catch (SerialPortException e) {

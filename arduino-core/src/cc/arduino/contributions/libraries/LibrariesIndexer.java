@@ -33,7 +33,6 @@ import cc.arduino.Constants;
 import cc.arduino.contributions.libraries.filters.LibraryInstalledInsideCore;
 import cc.arduino.contributions.libraries.filters.TypePredicate;
 import cc.arduino.contributions.packages.ContributedPlatform;
-import cc.arduino.contributions.packages.ContributionsIndexer;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.module.mrbean.MrBeanModule;
@@ -58,7 +57,6 @@ import static processing.app.I18n.tr;
 
 public class LibrariesIndexer {
 
-  private final ContributionsIndexer contributionsIndexer;
   private LibrariesIndex index;
   private final LibraryList installedLibraries = new LibraryList();
   private final LibraryList installedLibrariesWithDuplicates = new LibraryList();
@@ -69,14 +67,17 @@ public class LibrariesIndexer {
 
   private final List<String> badLibNotified = new ArrayList<>();
 
-  public LibrariesIndexer(File preferencesFolder, ContributionsIndexer contributionsIndexer) {
-    this.contributionsIndexer = contributionsIndexer;
-    this.indexFile = new File(preferencesFolder, "library_index.json");
-    this.stagingFolder = new File(new File(preferencesFolder, "staging"), "libraries");
+  public LibrariesIndexer(File preferencesFolder) {
+    indexFile = new File(preferencesFolder, "library_index.json");
+    stagingFolder = new File(new File(preferencesFolder, "staging"), "libraries");
   }
 
   public void parseIndex() throws IOException {
-    parseIndex(indexFile);
+    if (!indexFile.exists()) {
+      index = new EmptyLibrariesIndex();
+    } else {
+      parseIndex(indexFile);
+    }
     // TODO: resolve libraries inner references
   }
 
@@ -123,8 +124,8 @@ public class LibrariesIndexer {
       scanInstalledLibraries(folder, folder.equals(sketchbookLibrariesFolder));
     }
 
-    installedLibraries.stream().filter(new TypePredicate("Contributed")).filter(new LibraryInstalledInsideCore(contributionsIndexer)).forEach(userLibrary -> {
-      ContributedPlatform platform = contributionsIndexer.getPlatformByFolder(userLibrary.getInstalledFolder());
+    installedLibraries.stream().filter(new TypePredicate("Contributed")).filter(new LibraryInstalledInsideCore()).forEach(userLibrary -> {
+      ContributedPlatform platform = BaseNoGui.indexer.getPlatformByFolder(userLibrary.getInstalledFolder());
       userLibrary.setTypes(Collections.singletonList(platform.getCategory()));
     });
   }
@@ -190,11 +191,11 @@ public class LibrariesIndexer {
     if (headers.length == 0) {
       throw new IOException(lib.getSrcFolder().getAbsolutePath());
     }
-    installedLibraries.addOrReplace(lib);
+    installedLibraries.addOrReplaceArchAware(lib);
     if (isSketchbook) {
       installedLibrariesWithDuplicates.add(lib);
     } else {
-      installedLibrariesWithDuplicates.addOrReplace(lib);
+      installedLibrariesWithDuplicates.addOrReplaceArchAware(lib);
     }
 
     // Check if we can find the same library in the index

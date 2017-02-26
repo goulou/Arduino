@@ -23,6 +23,15 @@ public class SketchTextAreaDefaultInputMap extends RSyntaxTextAreaDefaultInputMa
 
     remove(KeyStroke.getKeyStroke(KeyEvent.VK_K, defaultModifier));
 
+    // Remove a troublesome binding for the / key. By default, RSyntaxTextArea
+    // binds the / KEY_TYPED event to insert a / and optionally complete any XML
+    // tags. However, since this also triggeres on ctrl-slash, this means that
+    // in addition to toggling comments on ctrl-slash, it also inserts a slash.
+    // Since we don't need the XML completion feature anyway, just unbind it
+    // here. A future version of RSyntaxTextArea might fix this, see
+    // https://github.com/bobbylight/RSyntaxTextArea/issues/157.
+    remove(KeyStroke.getKeyStroke('/'));
+
     if (PreferencesData.getBoolean("editor.advanced")) {
       put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, alt), RTextAreaEditorKit.rtaLineDownAction);
       put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, alt), RTextAreaEditorKit.rtaLineUpAction);
@@ -45,8 +54,8 @@ public class SketchTextAreaDefaultInputMap extends RSyntaxTextAreaDefaultInputMa
 
       remove(KeyStroke.getKeyStroke(KeyEvent.VK_J, defaultModifier));
 
-      put(KeyStroke.getKeyStroke(KeyEvent.VK_OPEN_BRACKET, defaultModifier), DefaultEditorKit.insertTabAction);
-      put(KeyStroke.getKeyStroke(KeyEvent.VK_CLOSE_BRACKET, defaultModifier), RSyntaxTextAreaEditorKit.rstaDecreaseIndentAction);
+      put(KeyStroke.getKeyStroke(KeyEvent.VK_OPEN_BRACKET, defaultModifier), RSyntaxTextAreaEditorKit.rstaDecreaseIndentAction);
+      put(KeyStroke.getKeyStroke(KeyEvent.VK_CLOSE_BRACKET, defaultModifier), SketchTextAreaEditorKit.rtaIncreaseIndentAction);
 
       put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, defaultModifier | shift), DefaultEditorKit.selectionBeginAction);
       put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, defaultModifier | shift), DefaultEditorKit.selectionEndAction);
@@ -58,8 +67,14 @@ public class SketchTextAreaDefaultInputMap extends RSyntaxTextAreaDefaultInputMa
 
       put(KeyStroke.getKeyStroke(KeyEvent.VK_A, ctrl), DefaultEditorKit.beginLineAction);
       put(KeyStroke.getKeyStroke(KeyEvent.VK_E, ctrl), DefaultEditorKit.endLineAction);
+      put(KeyStroke.getKeyStroke(KeyEvent.VK_N, ctrl), DefaultEditorKit.downAction);
+      put(KeyStroke.getKeyStroke(KeyEvent.VK_P, ctrl), DefaultEditorKit.upAction);
+      put(KeyStroke.getKeyStroke(KeyEvent.VK_B, ctrl), DefaultEditorKit.backwardAction);
+      put(KeyStroke.getKeyStroke(KeyEvent.VK_F, ctrl), DefaultEditorKit.forwardAction);
+      put(KeyStroke.getKeyStroke(KeyEvent.VK_D, ctrl), DefaultEditorKit.deleteNextCharAction);
     }
 
+    // VK_DIVIDE is the keypad; should this be added to VK_SLASH as well?
     put(KeyStroke.getKeyStroke(KeyEvent.VK_DIVIDE, defaultModifier), RSyntaxTextAreaEditorKit.rstaToggleCommentAction);
 
     put(KeyStroke.getKeyStroke(KeyEvent.VK_KP_LEFT, 0), DefaultEditorKit.backwardAction);
